@@ -25,8 +25,12 @@ app.get("/healthz", (req, res) => {
 // ✅ ENDPOINT NHẬN SMS
 app.post("/sms", (req, res) => {
   console.log("📩 SMS RECEIVED");
+  console.log(req.body);
 
-  const data = req.body;
+  // BẮT BUỘC trả text + 200
+  res.status(200).send("OK");
+});
+
 
   // Trả 200 để app KHÔNG báo Fail
   res.status(200).json({
