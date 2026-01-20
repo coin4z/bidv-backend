@@ -1,69 +1,132 @@
+/**
+ * BIDV Backend - Render Ready
+ * Author: Demo chuẩn triển khai thật
+ */
+
 const express = require('express');
 const bodyParser = require('body-parser');
-const cors = require('cors');
 
 const app = express();
-app.use(cors());
+
+/* =========================
+   MIDDLEWARE
+========================= */
 app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
 
-/* ===== CONFIG ===== */
+/* =========================
+   CONFIG
+========================= */
 const PORT = process.env.PORT || 3000;
-const SECRET_KEY = process.env.SECRET_KEY || 'BIDV_SECRET';
+const SMS_SECRET = process.env.SMS_SECRET || 'bidv123';
 
-/* ===== LƯU GIAO DỊCH TẠM (DEMO) ===== */
-// 👉 thực tế nên dùng DB (Mongo / SQLite)
-let transactions = [];
+/**
+ * LƯU TẠM GIAO DỊCH (DEMO)
+ * Thực tế có thể thay bằng DB
+ */
+let transactions = []; // { amount, orderId, content, time }
 
-/* ===== API SMS FORWARDER GỬI LÊN ===== */
+/* =========================
+   HEALTH CHECK (BẮT BUỘC)
+========================= */
+app.get('/healthz', (req, res) => {
+  res.status(200).send('OK');
+});
+
+/* =========================
+   ROOT TEST
+========================= */
+app.get('/', (req, res) => {
+  res.send('✅ BIDV backend is running');
+});
+
+/* =========================
+   SMS WEBHOOK (TỪ SMS FORWARDER)
+========================= */
+/**
+ * SMS Forwarder cấu hình:
+ * URL: https://xxx.onrender.com/sms
+ * Method: POST
+ * Header: x-secret: bidv123
+ *
+ * Body (JSON):
+ * {
+ *   "message": "BIDV: +50,000 VND. ND: DH1700000000. So du: ..."
+ * }
+ */
 app.post('/sms', (req, res) => {
-  const { secret, bank, content, amount } = req.body;
+  const secret = req.headers['x-secret'];
 
-  if (secret !== SECRET_KEY) {
-    return res.status(403).json({ success: false });
+  if (secret !== SMS_SECRET) {
+    return res.status(403).json({ success: false, message: 'Invalid secret' });
   }
 
-  if (bank !== 'BIDV') {
-    return res.json({ success: false });
+  const sms = req.body.message || '';
+  console.log('📩 SMS:', sms);
+
+  /**
+   * PARSE SỐ TIỀN + ORDER ID
+   * VD: "+50,000 VND" & "DH1700000000"
+   */
+  const amountMatch = sms.match(/([\d,.]+)\s*VND/);
+  const orderMatch = sms.match(/DH\d+/);
+
+  if (!amountMatch || !orderMatch) {
+    return res.json({ success: false, message: 'Không tìm thấy giao dịch hợp lệ' });
   }
 
-  transactions.push({
-    content,
+  const amount = parseInt(amountMatch[1].replace(/[,\.]/g, ''), 10);
+  const orderId = orderMatch[0];
+
+  const tx = {
     amount,
+    orderId,
+    content: sms,
     time: Date.now()
-  });
+  };
 
-  console.log('📩 SMS BIDV:', content, amount);
+  transactions.push(tx);
+
+  console.log('✅ LƯU GIAO DỊCH:', tx);
 
   res.json({ success: true });
 });
 
-/* ===== API CHECK THANH TOÁN ===== */
-app.get('/check', (req, res) => {
+/* =========================
+   CHECK THANH TOÁN
+========================= */
+/**
+ * Frontend gọi:
+ * GET /check-payment?orderId=DHxxx&amount=50000
+ */
+app.get('/check-payment', (req, res) => {
   const { orderId, amount } = req.query;
 
-  const found = transactions.find(t =>
-    t.content.includes(orderId) &&
-    Number(t.amount) === Number(amount)
+  if (!orderId || !amount) {
+    return res.json({ paid: false, message: 'Thiếu tham số' });
+  }
+
+  const amt = parseInt(amount, 10);
+
+  const found = transactions.find(
+    tx => tx.orderId === orderId && tx.amount === amt
   );
 
   if (found) {
     return res.json({
-      success: true,
-      message: 'Đã thanh toán'
+      paid: true,
+      orderId,
+      amount: amt,
+      time: found.time
     });
   }
 
-  res.json({
-    success: false,
-    message: 'Chưa có giao dịch'
-  });
+  res.json({ paid: false });
 });
 
-/* ===== HEALTH CHECK ===== */
-app.get('/', (req, res) => {
-  res.send('BIDV Backend Running');
-});
-
+/* =========================
+   START SERVER (QUAN TRỌNG)
+========================= */
 app.listen(PORT, () => {
-  console.log('🚀 Server running on port', PORT);
+  console.log('🚀 BIDV backend running on port', PORT);
 });
