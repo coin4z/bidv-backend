@@ -22,24 +22,16 @@ app.get("/healthz", (req, res) => {
   res.send("OK");
 });
 
-// ✅ ENDPOINT NHẬN SMS
+// ✅ ENDPOINT NHẬN SMS / NOTIFICATION
 app.post("/sms", (req, res) => {
   console.log("📩 SMS RECEIVED");
   console.log(req.body);
 
-  // BẮT BUỘC trả text + 200
+  // BẮT BUỘC trả 200 để app không retry
   res.status(200).send("OK");
 });
 
-
-  // Trả 200 để app KHÔNG báo Fail
-  res.status(200).json({
-    success: true,
-    received: data,
-  });
-});
-
-// Bắt lỗi GET nhầm
+// Bắt nhầm GET /sms
 app.get("/sms", (req, res) => {
   res.send("SMS endpoint alive (POST only)");
 });
